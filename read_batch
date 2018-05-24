@@ -1,0 +1,94 @@
+# -*- coding: utf-8 -*-
+import tensorflow as tf
+import numpy as np
+
+
+def _bytes_features(value):
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
+
+def _int64_feature(value):
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+
+
+def write_tfrecords():
+    write = tf.python_io.TFRecordWriter("/home/binzh/PycharmProjects/object_detection/mnist_test/tfrecords/test.tfrecords")
+    for i in xrange(5):
+        im = np.array([i for j in range(5)], dtype="int32")
+        label = i
+
+        img_raw = im.tostring()
+
+        example = tf.train.Example(features=tf.train.Features(feature={
+            'img_raw': _bytes_features(img_raw),
+            'label': _int64_feature(label)
+        }))
+        write.write(example.SerializeToString())
+
+    write.close()
+
+
+def read_batch():
+    reader = tf.TFRecordReader()
+    files = tf.train.match_filenames_once("/home/binzh/PycharmProjects/object_detection/mnist_test/tfrecords/test.tfrecords")
+    filename_queue = tf.train.string_input_producer(files, num_epochs=5) #must set num_epochs
+    #_, queue_batch = reader.read_up_to(filename_queue, 1)
+
+    _, serialized_example = reader.read(filename_queue)
+
+
+    features = tf.parse_single_example(
+        serialized_example,
+        features={
+            "img_raw": tf.FixedLenFeature([], tf.string),
+            "label": tf.FixedLenFeature([], tf.int64)
+        })
+    imgs = tf.decode_raw(features['img_raw'], tf.int32)
+    imgs = tf.reshape(imgs, (1, 5))
+    label = features['label']
+
+    image_batch, label_batch = tf.train.shuffle_batch([imgs, label],
+                                                      batch_size=1,
+                                                      capacity=4,
+                                                      min_after_dequeue=3,
+                                                      num_threads=1)
+
+    '''
+    image_batch, label_batch = tf.train.batch([imgs, label],
+                                              batch_size=1,
+                                              num_threads=4,
+                                              capacity=4,
+                                              #min_after_dequeue=4
+                                              )
+    '''
+
+
+    '''
+    features = tf.parse_example(queue_batch, features={
+        'img_raw': tf.FixedLenFeature([], tf.string),
+        'label': tf.FixedLenFeature([], tf.int64)
+    })
+    imgs = tf.decode_raw(features['img_raw'], tf.int32)
+    '''
+    #label = features['label']
+    #return imgs#, label
+    return image_batch, label_batch
+
+
+write_tfrecords()
+images, labels = read_batch()
+
+with tf.Session() as sess:
+    tf.global_variables_initializer().run()
+    tf.local_variables_initializer().run()
+
+    coord = tf.train.Coordinator()
+    threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+
+    for i in range(25):
+        images_b, labels_b = sess.run([images, labels])
+        print images_b, labels_b
+
+
+    coord.request_stop()
+    coord.join(threads)
