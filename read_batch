@@ -92,3 +92,7 @@ with tf.Session() as sess:
 
     coord.request_stop()
     coord.join(threads)
+
+
+参考：
+https://blog.csdn.net/lujiandong1/article/details/53991373
